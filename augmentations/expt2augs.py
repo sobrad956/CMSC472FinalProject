@@ -11,7 +11,6 @@ import matplotlib
 
 # Saturation can be done with torchvision.transforms.ColorJitter or torchvision.functional.adjust_saturation
 
-
 # from https://stackoverflow.com/questions/11884544/setting-color-temperature-for-a-given-image-like-in-photoshop/11888449#11888449
 kelvin_table = {
     1000: (255,56,0),
@@ -78,7 +77,6 @@ class RandomAdjustTemp(torch.nn.Module):
 
 # simple testbench
 if __name__ == '__main__':
-    aug = RandomAdjustTemp(color=9500)
     root = os.path.expanduser(os.path.join('~', 'data'))
     dataset = CIFAR10(root=root, download=True, transform=ToTensor())
     aug = RandomAdjustTemp(color=9500, p=1)

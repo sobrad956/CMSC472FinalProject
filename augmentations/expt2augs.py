@@ -3,7 +3,9 @@ import torchvision as tv
 import torch.random
 import os
 import sys
-from torchvision.datasets import CIFAR10
+from PIL import Image
+from torchvision import transforms
+from torchvision.datasets import Food101
 from torchvision.transforms import ToTensor
 import torchvision
 import matplotlib.pyplot as plt 
@@ -78,7 +80,7 @@ class RandomAdjustTemp(torch.nn.Module):
 # simple testbench
 if __name__ == '__main__':
     root = os.path.expanduser(os.path.join('~', 'data'))
-    dataset = CIFAR10(root=root, download=True, transform=ToTensor())
+    dataset = Food101(root=root, download=True, transform=ToTensor())
     aug = RandomAdjustTemp(color=9500, p=1)
     oim = torch.unsqueeze(dataset[0][0], 0)
     aim = aug(torch.clone(oim))

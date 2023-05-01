@@ -19,11 +19,8 @@ Script:
             
             
 To-do:
-    * Object-orient all of the models and training scripts
     * Calculate all correct performance metrics
     * Create detailed logs and save models accurately
-    * Test on GPU
-    * Test if training properly
     * Create GAN
     * Test if training with GAN works
     * Create feature visualizations

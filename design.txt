@@ -1,0 +1,30 @@
+Script: 
+
+#Create 1 train/test split to work on.
+#For each augmentation:
+    #For each level of severity:
+        #Instantiate and train each model
+           # *Save best version of each model as .pth using validation set.
+           # *Save loss and accuracy at each iteration.
+           # *Save model
+        #Test each model
+           # *Save loss and accuracy at each iteration.
+        #Train GAN, generate 50% more training data
+        #Re-instantiate and train each model
+            # *Ditto
+        #Re-test each model
+            # *Ditto
+            
+            
+            
+            
+To-do:
+    * Object-orient all of the models and training scripts
+    * Calculate all correct performance metrics
+    * Create detailed logs and save models accurately
+    * Test on GPU
+    * Test if training properly
+    * Create GAN
+    * Test if training with GAN works
+    * Create feature visualizations
+    * Create feature maps

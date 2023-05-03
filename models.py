@@ -117,7 +117,7 @@ class DenseNet(nn.Module):
         out = self.trans2(self.dense2(out))
         out = self.dense3(out)
         out = torch.squeeze(F.avg_pool2d(F.relu(self.bn1(out)), 8))
-        out = F.log_softmax(self.fc(out))
+        out = F.log_softmax(self.fc(out), dim=1)
         return out
     
 class fire(nn.Module):
@@ -422,11 +422,13 @@ class RunNet():
             self.net = self.net.cuda()
             
         self.trainLosses = []
-        self.trainErrors = []
+        self.trainErrTop1 = []
+        self.trainErrTop5 = []
         self.trainF1s = []
         
         self.testLosses = []
-        self.testErrors = []
+        self.testErrTop1 = []
+        self.testErrTop5 = []
         self.testF1s = []
         
         self.bestError = 200.0
@@ -437,7 +439,8 @@ class RunNet():
         nProcessed = 0
         nTrain = len(self.trainLoader.dataset)
         epochLoss = []
-        epochError = 0
+        epochTop1Err = 0
+        epochTop5Err = 0
         targets = []
         outputs = []
         st = time.time()
@@ -451,15 +454,28 @@ class RunNet():
             loss.backward()
             optimizer.step()
             nProcessed += len(data)
-            pred = output.data.max(1)[1] # get the index of the max log-probability
-            outputs.append(pred.cpu())
-            targets.append(target.cpu())
-            incorrect = pred.ne(target.data).cpu().sum()
-            incorrect = incorrect.item()
+            
+            if self.cuda:
+                output, target = output.cpu(), target.cpu()
+                
+            confs, preds = torch.sort(output.data, dim=1) # sorts into tuple of (vals, inds) increasing in value
+            pred = preds[:,-1] # grab highest value index (class)
+            outputs.append(pred)
+            targets.append(target)
+            top1inc = pred.ne(target.data).sum().item() # top 1 not equal to target
+            
+            # could have done this with functorch.vmap but I am not doing that
+            top5inc = 0
+            for tgt, ipd in zip(target.data, preds):
+                top5inc += int(tgt not in ipd[-5:]) # target not in top 5
+                
             epochLoss.append(loss.item())
-            epochError += incorrect
-        epochError = (epochError*100.0) / nProcessed
-        self.trainErrors.append(epochError)
+            epochTop1Err += top1inc
+            epochTop5Err += top5inc
+        epochTop1Err = (epochTop1Err*100.0) / nProcessed
+        epochTop5Err = (epochTop5Err*100.0) / nProcessed
+        self.trainErrTop1.append(epochTop1Err)
+        self.trainErrTop5.append(epochTop5Err)
         
         epochLoss = np.mean(epochLoss)
         self.trainLosses.append(epochLoss)
@@ -472,9 +488,10 @@ class RunNet():
         elapsed_time = (et - st)/60.0
         self.totalTime += elapsed_time
         
+        msg = 'Train Epoch: {:.2f}, loss: {:.2f}, Error: {:.2f} / {:.2f}, F1-Score: {:.2f}, Elapsed Time in Minutes: {:.2f}'.format(epoch, epochLoss, epochTop1Err, epochTop5Err, fscore, elapsed_time)
         if self.verbose:
-            print('Train Epoch: {:.2f}, loss: {:.2f}, Error: {:.2f}, F1-Score: {:.2f}, Elapsed Time in Minutes: {:.2f}'.format(epoch, epochLoss, epochError, fscore, elapsed_time))
-        trainF.write('Train Epoch: {:.2f}, loss: {:.2f}, Error: {:.2f}, F1-Score: {:.2f}, Elapsed Time in Minutes: {:.2f} '.format(epoch, epochLoss, epochError, fscore, elapsed_time))
+            print(msg)
+        trainF.write(msg)
         trainF.flush()
             
         
@@ -482,44 +499,59 @@ class RunNet():
         st = time.time()
         self.net.eval()
         val_loss = []
-        incorrect = 0
+        incorrectTop1 = 0
+        incorrectTop5 = 0
         targets = []
         outputs = []
+        
         for batch_idx, (data, target) in enumerate(self.valLoader):
             if self.cuda:
                 data, target = data.cuda(), target.cuda()
+            
             data, target = Variable(data), Variable(target)
             output = self.net(data).squeeze()
+            
+            if self.cuda:
+                output, target = output.cpu(), target.cpu()
+                
             loss = F.nll_loss(output, target)
             val_loss.append(loss.item())
-            pred = output.data.max(1)[1] # get the index of the max log-probability
-            incorrect += pred.ne(target.data).cpu().sum()
-            incorrect = incorrect.item()
+            confs, preds = torch.sort(output.data, dim=1) # sorts into tuple of (vals, inds) increasing in value
+            pred = preds[:,-1] # grab highest value index (class)
+            incorrectTop1 += pred.ne(target.data).cpu().sum()
+            incorrectTop1 = incorrectTop1.item()
+            
+            # could have done this with functorch.vmap but I am not doing that
+            for tgt, ipd in zip(target.data, preds):
+                incorrectTop5 += int(tgt not in ipd[-5:]) # target not in top 5
+            
             targets.append(target.cpu())
             outputs.append(pred.cpu())
 
         val_loss = np.mean(val_loss)
         self.testLosses.append(val_loss)
         nTotal = len(self.valLoader.dataset)
-        error = (100.0*incorrect)/nTotal
-        self.testErrors.append(error)
+        errorTop1 = (100.0*incorrectTop1)/nTotal
+        errorTop5 = (100.0*incorrectTop5)/nTotal
+        self.testErrTop1.append(errorTop1)
+        self.testErrTop5.append(errorTop5)
         outputs = np.concatenate(outputs)
         targets = np.concatenate(targets)
         fscore = f1_score(targets, outputs, average="macro")
         self.testF1s.append(fscore)
         
-        if self.bestError > error:
-            self.bestError = error
+        if self.bestError > errorTop1:
+            self.bestError = errorTop1
             torch.save(self.net.state_dict(), self.save+'/best_model.pth')
         et = time.time()
         elapsed_time = (et-st)/60.0
         self.totalTime += elapsed_time
         
+        msg = 'Val set Epoch: {:.2f}, loss: {:.2f}, Error: {:.2f} / {:.2f}, F1-Score: {:.2f}, Elapsed Time in Minutes: {:.2f}'.format(
+        epoch, val_loss, errorTop1, errorTop5, fscore, elapsed_time)
         if self.verbose:
-            print('\nVal set Epoch: {:.2f}, loss: {:.2f}, Error: {:.2f}, F1-Score: {:.2f}, Elapsed Time in Minutes: {:.2f}'.format(
-        epoch, val_loss, error, fscore, elapsed_time))
-        valF.write('Val set Epoch: {:.2f}, loss: {:.2f}, Error: {:.2f}, F1-Score: {:.2f}, Elapsed Time in Minutes: {:.2f}'.format(
-        epoch, val_loss, error, fscore, elapsed_time))
+            print(msg)
+        valF.write(msg)
         valF.flush()
 
     def getschedule(self, epoch):
@@ -581,8 +613,10 @@ class RunNet():
         plt.savefig(self.save+'/loss.png')
         plt.close()
         
-        plt.plot(self.trainErrors, label='train')
-        plt.plot(self.testErrors, label='test')
+        plt.plot(self.trainErrTop1, label='train top 1')
+        plt.plot(self.trainErrTop5, label='train top 5')
+        plt.plot(self.testErrTop1, label='test top 1')
+        plt.plot(self.testErrTop5, label='test top 5')
         plt.legend(loc='best')
         plt.title('Training vs Testing Error by Epoch')
         plt.xlabel('Epoch #')
@@ -600,4 +634,4 @@ class RunNet():
         plt.close()
         
         with open(self.save+'/variables.pkl', 'wb') as file:
-            pickle.dump([self.trainLosses, self.testLosses, self.trainErrors, self.testErrors, self.trainF1s, self.testF1s], file)
+            pickle.dump([self.trainLosses, self.testLosses, self.trainErrTop1, self.testErrTop1, self.trainF1s, self.testF1s], file)

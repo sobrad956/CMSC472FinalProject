@@ -9,12 +9,12 @@ import matplotlib.pyplot as plt
 
 # assumes original color temp maxed out at (255,255,255)
 # expect Tensor of [..., 3 (r,g,b), H, W]
-class RandomDropout(torch.nn.Module):
-    def __init__(self, s=2, i=1, k=0.5):
+class RandomApplyOne(torch.nn.Module):
+    def __init__(self, k=0.5, augs=None):
         super().__init__()
-        self.s = s
-        self.i = i
+        self.augs = augs
         self.k = k
+        
         
     def forward(self, imgs):
         if torch.rand(1) > self.k:
@@ -24,35 +24,34 @@ class RandomDropout(torch.nn.Module):
         if imgs.dim() == 3:
             imgs = torch.unsqueeze(imgs, 0)
             singleton = True
-    
+                    
         # probably slow AF and not pythonic
         for i, img in enumerate(imgs):
-            # top-left corner
-            mc, mh, mw = img.shape
-            
-            # could be done with numpy but done for consistency with torch rng
-            xanch = torch.randint(0, mw-self.s+1, (self.i,))
-            yanch = torch.randint(0, mh-self.s+1, (self.i,))
+            if torch.rand(1) <= self.k:
+                aug = torch.randint(0,len(self.augs),(1,)).item()
+                imgs[i] = self.augs[aug](torch.unsqueeze(img, 0))            
 
-            for x, y in zip(xanch, yanch):
-                x = x.item()
-                y = y.item()
-                imgs[i,:,y:y+self.s,x:x+self.s] = 0
-        
         if singleton:
             imgs = torch.squeeze(imgs, 0)
-        
+                          
         return imgs
 
 # simple testbench
 if __name__ == '__main__':
     root = os.path.expanduser(os.path.join('~', 'data'))
     dataset = Food101(root=root, download=True, transform=ToTensor())
-    aug = RandomDropout(k=1, i=2, s=50)
+    augs = [
+        transforms.RandomRotation(180), 
+        transforms.RandomResizedCrop((512,512),antialias=True),
+        transforms.RandomAffine(0, translate=(0.20,0.20)),
+        transforms.RandomAffine(0, shear=(20,20))
+    ]
+    aug = RandomApplyOne(k=1, augs=augs)
     oim = torch.unsqueeze(dataset[0][0], 0)
-    aim = aug(torch.clone(oim))
     plt.figure(0)
-    plt.imshow(aim[0].permute(1,2,0))
-    plt.figure(1)
     plt.imshow(oim[0].permute(1,2,0))
-    plt.show()
+    for i in range(10):
+        aim = aug(torch.clone(oim))
+        plt.figure(i + 1)
+        plt.imshow(aim[0].permute(1,2,0))
+        plt.show()

@@ -20,6 +20,11 @@ class RandomRegionSwap(torch.nn.Module):
     def forward(self, imgs):
         if torch.rand(1) > self.k or self.i < 2:
             return imgs
+         
+        singleton = False
+        if imgs.dim() == 3:
+            imgs = torch.unsqueeze(imgs, 0)
+            singleton = True
                     
         # probably slow AF and not pythonic
         for i, img in enumerate(imgs):
@@ -46,7 +51,10 @@ class RandomRegionSwap(torch.nn.Module):
             
             for x, y, c in zip(xanch, yanch, new_inds):
                 imgs[i,:,y:y+self.s,x:x+self.s] = crops[c]
-                
+
+        if singleton:
+            imgs = torch.squeeze(imgs, 0)
+    
         return imgs
 
 # simple testbench

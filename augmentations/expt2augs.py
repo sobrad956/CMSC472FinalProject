@@ -62,13 +62,21 @@ class RandomAdjustTemp(torch.nn.Module):
             cm = kelvin_table[color]
         else:
             cm = (0,0,0)
-            
+        
+        singleton = False
+        if imgs.dim() == 3:
+            imgs = torch.unsqueeze(imgs, 0)
+            singleton = True
+        
         # probably slow AF and not pythonic
         for i, img in enumerate(imgs):
             for c, channel in enumerate(img):
                 for h, row in enumerate(channel):
                     for w, _ in enumerate(row):
                         imgs[i][c][h][w] *= cm[c] / 255.0
+        
+        if singleton:
+            imgs = torch.squeeze(imgs, 0)
         
         return imgs
         

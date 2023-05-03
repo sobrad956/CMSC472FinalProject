@@ -388,7 +388,7 @@ class InceptionE(Module):
         return torch.cat(outputs, 1)
     
 class RunNet():
-    def __init__(self, batchSz=64, nEpochs=100, seed=1, model=None, trainLoader=None, valLoader=None, verbose = False, experiment = None):
+    def __init__(self, batchSz=64, nEpochs=100, seed=1, model=None, trainLoader=None, valLoader=None, augment=None, verbose = False, experiment = None):
         self.batchSz = batchSz
         self.nEpochs = nEpochs
         self.seed = seed
@@ -398,6 +398,7 @@ class RunNet():
         self.valLoader = valLoader
         self.verbose = verbose
         self.model = model
+        self.augment = augment
         
         if experiment != None:
             self.save = 'out/'+str(self.model)+'/'+str(experiment)
@@ -445,6 +446,9 @@ class RunNet():
         outputs = []
         st = time.time()
         for batch_idx, (data, target) in enumerate(self.trainLoader):
+            if self.augment:
+                self.augment(data)
+                
             if self.cuda:
                 data, target = data.cuda(), target.cuda()
             data, target = Variable(data), Variable(target)

@@ -28,14 +28,29 @@ class RandomSaltPepper(torch.nn.Module):
     def forward(self, imgs):
         if not len(self.color):
             return imgs
-                    
-        # probably slow AF and not pythonic
-        for i, img in enumerate(imgs):
-            for h, row in enumerate(img[0]):
-                for w, _ in enumerate(row):
-                    if torch.rand(1) < self.p:
-                        imgs[i,:,h,w] = self.color[torch.randint(0, len(self.color), (1,)).item()]
         
+        singleton = False
+        if imgs.dim() == 3:
+            imgs = torch.unsqueeze(imgs, 0)
+            singleton = True
+        
+        ni, ch, nx, ny = imgs.shape
+    
+        if self.salt:
+            salt_mask = torch.rand((ni, nx, ny))
+            salt_mask = (salt_mask < self.p).long()
+            salt_mask = torch.unsqueeze(salt_mask, 1).repeat(1, ch, 1, 1)
+            imgs *= 1 - salt_mask # remove things that are salt
+            imgs += salt_mask # add salt
+        
+        if self.pepper:
+            pepper_mask = torch.rand((ni, nx, ny))
+            pepper_mask = (pepper_mask < self.p).long()
+            pepper_mask = torch.unsqueeze(pepper_mask, 1).repeat(1, ch, 1, 1)
+            imgs *= 1 - pepper_mask
+        
+        if singleton:
+            imgs = torch.squeeze(imgs, 0)
         return imgs
 
 class RandomGaussianNoise(torch.nn.Module):
@@ -55,7 +70,7 @@ class RandomGaussianNoise(torch.nn.Module):
 if __name__ == '__main__':
     root = os.path.expanduser(os.path.join('~', 'data'))
     dataset = Food101(root=root, download=True, transform=ToTensor())
-    aug = RandomSaltPepper(p=0.2, type='both')
+    aug = RandomSaltPepper(p=0.1, type='both')
     aug2 = RandomGaussianNoise(mean=0,var=1./255.)
     oim = torch.unsqueeze(dataset[0][0], 0)
     aim = aug(torch.clone(oim))

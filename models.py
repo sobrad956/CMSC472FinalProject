@@ -418,7 +418,7 @@ class RunNet():
             raise Exception("Sorry, that model does not exist")
             
         if self.cuda:
-            self.net = net.cuda()
+            self.net = self.net.cuda()
             
         self.trainLosses = []
         self.trainErrors = []
@@ -449,15 +449,16 @@ class RunNet():
             optimizer.step()
             nProcessed += len(data)
             pred = output.data.max(1)[1] # get the index of the max log-probability
-            outputs.append(pred)
-            targets.append(target)
+            outputs.append(pred.cpu())
+            targets.append(target.cpu())
             incorrect = pred.ne(target.data).cpu().sum()
+            incorrect = incorrect.item()
             epochLoss.append(loss.item())
             epochError += incorrect
-        epochError /= (nProcessed*100.0)
+        epochError = (epochError*100.0) / nProcessed
         self.trainErrors.append(epochError)
         
-        epochLoss = torch.mean(epochLoss)
+        epochLoss = np.mean(epochLoss)
         self.trainLosses.append(epochLoss)
         
         outputs = np.concatenate(outputs)
@@ -482,14 +483,15 @@ class RunNet():
                 data, target = data.cuda(), target.cuda()
             data, target = Variable(data), Variable(target)
             output = self.net(data).squeeze()
-            loss += F.nll_loss(output, target)
+            loss = F.nll_loss(output, target)
             val_loss.append(loss.item())
             pred = output.data.max(1)[1] # get the index of the max log-probability
             incorrect += pred.ne(target.data).cpu().sum()
-            targets.append(target)
-            outputs.append(pred)
+            incorrect = incorrect.item()
+            targets.append(target.cpu())
+            outputs.append(pred.cpu())
 
-        val_loss = torch.mean(val_loss)
+        val_loss = np.mean(val_loss)
         self.testLosses.append(val_loss)
         nTotal = len(self.valLoader.dataset)
         error = (100.0*incorrect)/nTotal
@@ -551,9 +553,11 @@ class RunNet():
             optimizer = optim.SGD(self.net.parameters(), lr=self.lr, momentum=self.momentum, weight_decay=self.wd)
             
             self.train(epoch, optimizer, trainF)
+            trainF.write("\n")
             self.val(epoch, optimizer, valF)
+            valF.write("\n")
             
-            torch.save(self.net, os.path.join(self.save, '/latest.pth'))
+            torch.save(self.net, os.path.join(self.save, 'latest.pth'))
         trainF.close()
         valF.close()
         
@@ -561,8 +565,8 @@ class RunNet():
         plt.plot(self.testLosses, label='test')
         plt.legend(loc='best')
         plt.title('Training vs Testing Loss by Epoch')
-        plt.ylabel('Epoch #')
-        plt.xlabel('Loss')
+        plt.xlabel('Epoch #')
+        plt.ylabel('Loss')
         plt.savefig(self.save+'/loss.png')
         plt.close()
         
@@ -570,8 +574,8 @@ class RunNet():
         plt.plot(self.testErrors, label='test')
         plt.legend(loc='best')
         plt.title('Training vs Testing Error by Epoch')
-        plt.ylabel('Epoch #')
-        plt.xlabel('Error %')
+        plt.xlabel('Epoch #')
+        plt.ylabel('Error %')
         plt.savefig(self.save+'/error.png')
         plt.close()
         
@@ -579,8 +583,8 @@ class RunNet():
         plt.plot(self.testF1s, label='test')
         plt.legend(loc='best')
         plt.title('Training vs Testing F1-Score by Epoch')
-        plt.ylabel('Epoch #')
-        plt.xlabel('F1-Score')
+        plt.xlabel('Epoch #')
+        plt.ylabel('F1-Score')
         plt.savefig(self.save+'/f1.png')
         plt.close()
         

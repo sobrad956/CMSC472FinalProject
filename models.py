@@ -18,6 +18,7 @@ from torch.nn import Module, Sequential, LeakyReLU, Conv2d, BatchNorm2d, AvgPool
 from sklearn.metrics import f1_score 
 import matplotlib.pyplot as plt
 import pickle
+import time
 
 class Bottleneck(nn.Module):
     def __init__(self, nChannels, growthRate):
@@ -429,6 +430,7 @@ class RunNet():
         self.testF1s = []
         
         self.bestError = 200.0
+        self.totalTime = 0.0
         
     def train(self, epoch, optimizer, trainF):
         self.net.train()
@@ -438,6 +440,7 @@ class RunNet():
         epochError = 0
         targets = []
         outputs = []
+        st = time.time()
         for batch_idx, (data, target) in enumerate(self.trainLoader):
             if self.cuda:
                 data, target = data.cuda(), target.cuda()
@@ -465,14 +468,18 @@ class RunNet():
         targets = np.concatenate(targets)
         fscore = f1_score(targets, outputs, average="macro")
         self.trainF1s.append(fscore)
+        et = time.time()
+        elapsed_time = (et - st)/60.0
+        self.totalTime += elapsed_time
         
         if self.verbose:
-            print('Train Epoch: {:.2f}, loss: {:.2f}, Error: {:.2f}, F1-Score: {:.2f} '.format(epoch, epochLoss, epochError, fscore))
-        trainF.write('Train Epoch: {:.2f}, loss: {:.2f}, Error: {:.2f}, F1-Score: {:.2f} '.format(epoch, epochLoss, epochError, fscore))
+            print('Train Epoch: {:.2f}, loss: {:.2f}, Error: {:.2f}, F1-Score: {:.2f}, Elapsed Time in Minutes: {:.2f}'.format(epoch, epochLoss, epochError, fscore, elapsed_time))
+        trainF.write('Train Epoch: {:.2f}, loss: {:.2f}, Error: {:.2f}, F1-Score: {:.2f}, Elapsed Time in Minutes: {:.2f} '.format(epoch, epochLoss, epochError, fscore, elapsed_time))
         trainF.flush()
             
         
     def val(self, epoch, optimizer, valF):
+        st = time.time()
         self.net.eval()
         val_loss = []
         incorrect = 0
@@ -504,12 +511,15 @@ class RunNet():
         if self.bestError > error:
             self.bestError = error
             torch.save(self.net.state_dict(), self.save+'/best_model.pth')
+        et = time.time()
+        elapsed_time = (et-st)/60.0
+        self.totalTime += elapsed_time
         
         if self.verbose:
-            print('\nVal set Epoch: {:.2f}, loss: {:.2f}, Error: {:.2f}, F1-Score: {:.2f}'.format(
-        epoch, val_loss, error, fscore))
-        valF.write('Val set Epoch: {:.2f}, loss: {:.2f}, Error: {:.2f}, F1-Score: {:.2f}'.format(
-        epoch, val_loss, error, fscore))
+            print('\nVal set Epoch: {:.2f}, loss: {:.2f}, Error: {:.2f}, F1-Score: {:.2f}, Elapsed Time in Minutes: {:.2f}'.format(
+        epoch, val_loss, error, fscore, elapsed_time))
+        valF.write('Val set Epoch: {:.2f}, loss: {:.2f}, Error: {:.2f}, F1-Score: {:.2f}, Elapsed Time in Minutes: {:.2f}'.format(
+        epoch, val_loss, error, fscore, elapsed_time))
         valF.flush()
 
     def getschedule(self, epoch):
@@ -560,6 +570,7 @@ class RunNet():
             torch.save(self.net, os.path.join(self.save, 'latest.pth'))
         trainF.close()
         valF.close()
+        print('TOTAL TIME ELAPSED IN HOURS: {:.2f}'.format(self.totalTime/60.0))
         
         plt.plot(self.trainLosses, label='train')
         plt.plot(self.testLosses, label='test')
